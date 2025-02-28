@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '/services/api_service.dart';
+import '../controllers/exchange_controller.dart';
+import '../models/exchange_rate.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -9,83 +10,24 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Map<String, double>? liveRates;
-  double? _selectedRate;
-  double? _conversionResult;
-
-  bool isLoading = false;
-  String errorMessage = '';
-
-  final List<String> currencyList = ['USD', 'AUD', 'CAD', 'PLN', 'MXN', 'JPY', 'EUR', 'GBP'];
-  String _selectedBase = 'GBP';
-  String _selectedTarget = 'USD';
-
+  late ExchangeController controller;
   final TextEditingController _amountController = TextEditingController(text: '1');
 
   @override
   void initState() {
     super.initState();
-    _fetchRates();
-  }
-
-  Future<void> _fetchRates() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = '';
+    controller = ExchangeController();
+    controller.fetchRates();
+    controller.addListener(() {
+      setState(() {});
     });
-    try {
-      final result = await ApiService.fetchLiveRates(
-        source: 'GBP',
-        currencies: ['USD', 'AUD', 'CAD', 'PLN', 'MXN'],
-      );
-      setState(() {
-        liveRates = result;
-      });
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Viga: $e';
-      });
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
   }
 
-  Future<void> _fetchSelectedRate() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = '';
-      _selectedRate = null;
-      _conversionResult = null;
-    });
-    try {
-      final result = await ApiService.fetchLiveRates(
-        source: _selectedBase,
-        currencies: [_selectedTarget],
-      );
-      setState(() {
-        _selectedRate = result['$_selectedBase$_selectedTarget'];
-      });
-      _calculateConversion();
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Viga: $e';
-      });
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  void _calculateConversion() {
-    final amount = double.tryParse(_amountController.text) ?? 0.0;
-    if (_selectedRate != null) {
-      setState(() {
-        _conversionResult = amount * _selectedRate!;
-      });
-    }
+  @override
+  void dispose() {
+    controller.dispose();
+    _amountController.dispose();
+    super.dispose();
   }
 
   @override
@@ -97,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _fetchRates,
+            onPressed: controller.fetchRates,
           ),
         ],
       ),
@@ -133,10 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         DropdownButton<String>(
-                          value: _selectedBase,
+                          value: controller.selectedBase,
                           style: const TextStyle(color: Colors.white, fontSize: 18),
                           dropdownColor: Colors.black,
-                          items: currencyList.map((currency) {
+                          items: controller.currencyList.map((currency) {
                             return DropdownMenuItem(
                               value: currency,
                               child: Text(currency, style: const TextStyle(fontSize: 18, color: Colors.white)),
@@ -145,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
-                                _selectedBase = val;
+                                controller.selectedBase = val;
                               });
                             }
                           },
@@ -154,10 +96,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Icon(Icons.arrow_forward, size: 24, color: Colors.white),
                         const SizedBox(width: 16),
                         DropdownButton<String>(
-                          value: _selectedTarget,
+                          value: controller.selectedTarget,
                           style: const TextStyle(color: Colors.white, fontSize: 18),
                           dropdownColor: Colors.black,
-                          items: currencyList.map((currency) {
+                          items: controller.currencyList.map((currency) {
                             return DropdownMenuItem(
                               value: currency,
                               child: Text(currency, style: const TextStyle(fontSize: 18, color: Colors.white)),
@@ -166,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
-                                _selectedTarget = val;
+                                controller.selectedTarget = val;
                               });
                             }
                           },
@@ -194,14 +136,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       onChanged: (value) {
-                        if (_selectedRate != null) {
-                          _calculateConversion();
-                        }
+                        final amount = double.tryParse(value) ?? 0.0;
+                        controller.calculateConversion(amount);
                       },
                     ),
                     const SizedBox(height: 10),
                     ElevatedButton(
-                      onPressed: _fetchSelectedRate,
+                      onPressed: controller.fetchSelectedRate,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
@@ -209,9 +150,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: const Text('Convert'),
                     ),
                     const SizedBox(height: 10),
-                    _conversionResult != null
+                    controller.conversionResult != null
                         ? Text(
-                      '${_amountController.text} $_selectedBase = ${_conversionResult!.toStringAsFixed(4)} $_selectedTarget',
+                      '${_amountController.text} ${controller.selectedBase} = ${controller.conversionResult!.toStringAsFixed(4)} ${controller.selectedTarget}',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -223,12 +164,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              isLoading
+              controller.isLoading
                   ? const CircularProgressIndicator()
-                  : errorMessage.isNotEmpty
-                  ? Text(errorMessage, style: const TextStyle(color: Colors.red))
-                  : liveRates != null
-                  ? _buildRatesListView()
+                  : controller.errorMessage.isNotEmpty
+                  ? Text(controller.errorMessage, style: const TextStyle(color: Colors.red))
+                  : controller.liveRates != null
+                  ? _buildRatesListView(controller.liveRates!)
                   : const Text('Kursiandmeid pole saadaval', style: TextStyle(color: Colors.white)),
             ],
           ),
@@ -237,18 +178,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRatesListView() {
-    final entries = liveRates!.entries.toList();
+  Widget _buildRatesListView(List<ExchangeRate> rates) {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      itemCount: entries.length,
+      itemCount: rates.length,
       itemBuilder: (context, index) {
-        final symbol = entries[index].key;
-        final rateValue = entries[index].value;
-        final sourceCurrency = symbol.substring(0, 3);
-        final targetCurrency = symbol.substring(3);
+        final exchangeRate = rates[index];
         return Card(
           elevation: 4,
           color: Colors.grey[850],
@@ -259,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListTile(
             leading: const Icon(Icons.currency_exchange, color: Colors.teal),
             title: Text(
-              '$sourceCurrency → $targetCurrency',
+              '${exchangeRate.source} → ${exchangeRate.target}',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -267,18 +204,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             subtitle: Text(
-              '1 $sourceCurrency = ${rateValue.toStringAsFixed(4)} $targetCurrency',
+              '1 ${exchangeRate.source} = ${exchangeRate.rate.toStringAsFixed(4)} ${exchangeRate.target}',
               style: const TextStyle(fontSize: 16, color: Colors.white),
             ),
           ),
         );
       },
     );
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
   }
 }

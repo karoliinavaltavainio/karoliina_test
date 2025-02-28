@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/exchange_rate.dart';
 
 class ApiService {
   static const String _myApiKey = 'e76d6c475aa56272b74bce8d5e1934f8';
 
-
-  static Future<Map<String, double>> fetchLiveRates({
+  static Future<List<ExchangeRate>> fetchLiveRates({
     required String source,
     required List<String> currencies,
   }) async {
@@ -35,14 +35,12 @@ class ApiService {
         }
 
         final quotes = data['quotes'] as Map<String, dynamic>;
-        final Map<String, double> result = {};
+        final List<ExchangeRate> rates = [];
         quotes.forEach((key, value) {
-          if (value is num) {
-            result[key] = value.toDouble();
-          }
+          rates.add(ExchangeRate.fromKeyValue(key, value));
         });
 
-        return result;
+        return rates;
       } else {
         throw Exception('API viga: ${data['error'] ?? data}');
       }
